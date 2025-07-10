@@ -118,3 +118,18 @@ The tool uses the following priority order for configuration:
 4. **Default values** (lowest priority)
 
 This means that command line arguments will override environment variables, which will override configuration file values, which will override defaults. 
+
+| Variable            | Description                                 | Example Value                  |
+|---------------------|---------------------------------------------|-------------------------------|
+| IMPALA_HOST         | Source database host                        | impala-cluster.example.com    |
+| IMPALA_PORT         | Source database port                        | 21050                        |
+| IMPALA_DATABASE     | Source database name                        | default                       |
+| CONNECTION_TYPE     | Connection type (impyla, pyodbc, sqlalchemy)| impyla                        |
+| TARGET_HDFS_PATH    | HDFS path for data landing                  | /user/data/landing            |
+| CHUNK_SIZE          | Number of rows per chunk                    | 1000000                       |
+| MAX_WORKERS         | Number of parallel workers                  | 4                             |
+| OUTPUT_FORMAT       | Output format (parquet, csv)                | parquet                       |
+| ODBC_DRIVER         | ODBC driver name                            | ODBC Driver 17 for SQL Server |
+| ODBC_CONNECTION_STRING | Full ODBC connection string               | ...                           |
+| SQLALCHEMY_URL      | SQLAlchemy connection URL                   | postgresql://...              |
+| TEMP_DIR            | Directory for temp files and log files      | /tmp/impala_transfer          | 

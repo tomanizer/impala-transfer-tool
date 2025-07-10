@@ -68,7 +68,7 @@ class ImpalaTransferTool:
         self._validate_sqlalchemy_config(connection_type, sqlalchemy_url)
         
         # Setup components
-        self._setup_logging()
+        self._setup_logging(temp_dir)
         FileManager.ensure_temp_directory(temp_dir)
         
         # Create component instances
@@ -160,17 +160,19 @@ class ImpalaTransferTool:
         
         return kwargs
     
-    def _setup_logging(self) -> None:
+    def _setup_logging(self, temp_dir: str) -> None:
         """Setup logging configuration.
         
         Configures logging with both file and console handlers, using
         a timestamp-based log file name to avoid conflicts.
         """
+        os.makedirs(temp_dir, exist_ok=True)
+        log_file = os.path.join(temp_dir, f'impala_transfer_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(f'impala_transfer_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'),
+                logging.FileHandler(log_file),
                 logging.StreamHandler()
             ]
         )
