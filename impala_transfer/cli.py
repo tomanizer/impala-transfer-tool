@@ -388,10 +388,11 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
     
+    # Setup logging first so it's available in exception handlers
+    setup_logging(args.verbose)
+    logger = logging.getLogger(__name__)
+    
     try:
-        # Setup logging
-        setup_logging(args.verbose)
-        
         # Load configuration from multiple sources
         env_config = get_environment_config()
         file_config = load_config_from_file(args.config)
@@ -432,8 +433,6 @@ def main() -> int:
         )
         
         # Handle utility commands
-        logger = logging.getLogger(__name__)
-        
         if args.test_connection:
             logger.info("Testing database connection...")
             if tool.test_connection():
