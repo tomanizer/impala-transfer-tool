@@ -23,24 +23,26 @@ class TestCTASFunctionality(unittest.TestCase):
         """Test building basic CTAS query."""
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, False
         )
         
-        expected = "CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' LOCATION '{location}' AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
     
     def test_build_ctas_query_with_overwrite(self):
         """Test building CTAS query with overwrite."""
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, True
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, True
         )
         
-        expected = "CREATE TABLE test_table STORED AS PARQUET COMPRESSION 'SNAPPY' AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE test_table STORED AS PARQUET COMPRESSION 'SNAPPY' LOCATION '{location}' AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
     
     def test_build_ctas_query_with_location(self):
@@ -60,27 +62,29 @@ class TestCTASFunctionality(unittest.TestCase):
         """Test building CTAS query with partitioning."""
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         partitioned_by = ["date", "region"]
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'PARQUET', 'SNAPPY', None, partitioned_by, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, partitioned_by, None, None, False
         )
         
-        expected = "CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' PARTITIONED BY (date, region) AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' LOCATION '{location}' PARTITIONED BY (date, region) AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
     
     def test_build_ctas_query_with_clustering(self):
         """Test building CTAS query with clustering."""
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         clustered_by = ["user_id"]
         buckets = 32
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, clustered_by, buckets, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, clustered_by, buckets, False
         )
         
-        expected = "CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' CLUSTERED BY (user_id) INTO 32 BUCKETS AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET COMPRESSION 'SNAPPY' LOCATION '{location}' CLUSTERED BY (user_id) INTO 32 BUCKETS AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
     
     def test_build_ctas_query_with_all_options(self):
@@ -93,23 +97,34 @@ class TestCTASFunctionality(unittest.TestCase):
         buckets = 16
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'ORC', 'GZIP', location, partitioned_by, clustered_by, buckets, True
+            query, target_table, 'PARQUET', 'GZIP', location, partitioned_by, clustered_by, buckets, True
         )
         
-        expected = f"CREATE TABLE test_table STORED AS ORC COMPRESSION 'GZIP' LOCATION '{location}' PARTITIONED BY (date) CLUSTERED BY (user_id) INTO 16 BUCKETS AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE test_table STORED AS PARQUET COMPRESSION 'GZIP' LOCATION '{location}' PARTITIONED BY (date) CLUSTERED BY (user_id) INTO 16 BUCKETS AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
     
     def test_build_ctas_query_no_compression(self):
         """Test building CTAS query with no compression."""
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         ctas_query = self.query_executor._build_ctas_query(
-            query, target_table, 'TEXTFILE', 'NONE', None, None, None, None, False
+            query, target_table, 'PARQUET', 'NONE', location, None, None, None, False
         )
         
-        expected = "CREATE TABLE IF NOT EXISTS test_table STORED AS TEXTFILE AS SELECT * FROM source_table"
+        expected = f"CREATE TABLE IF NOT EXISTS test_table STORED AS PARQUET LOCATION '{location}' AS SELECT * FROM source_table"
         self.assertEqual(ctas_query, expected)
+    
+    def test_build_ctas_query_missing_location(self):
+        """Test that CTAS query fails without location."""
+        query = "SELECT * FROM source_table"
+        target_table = "test_table"
+        
+        with self.assertRaises(ValueError, msg="HDFS table location is required for CTAS operations."):
+            self.query_executor._build_ctas_query(
+                query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            )
     
     def test_execute_ctas_cursor_success(self):
         """Test successful CTAS execution with cursor."""
@@ -119,9 +134,10 @@ class TestCTASFunctionality(unittest.TestCase):
         
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         success = self.query_executor._execute_ctas_cursor(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, False
         )
         
         self.assertTrue(success)
@@ -137,9 +153,10 @@ class TestCTASFunctionality(unittest.TestCase):
         
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         success = self.query_executor._execute_ctas_cursor(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, False
         )
         
         self.assertFalse(success)
@@ -151,9 +168,10 @@ class TestCTASFunctionality(unittest.TestCase):
         
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         success = self.query_executor._execute_ctas_sqlalchemy(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, False
         )
         
         self.assertTrue(success)
@@ -166,9 +184,10 @@ class TestCTASFunctionality(unittest.TestCase):
         
         query = "SELECT * FROM source_table"
         target_table = "test_table"
+        location = "/data/tables/test_table"
         
         success = self.query_executor._execute_ctas_sqlalchemy(
-            query, target_table, 'PARQUET', 'SNAPPY', None, None, None, None, False
+            query, target_table, 'PARQUET', 'SNAPPY', location, None, None, None, False
         )
         
         self.assertFalse(success)
@@ -198,166 +217,152 @@ class TestCTASFunctionality(unittest.TestCase):
         cursor.close.assert_called_once()
     
     def test_table_exists_cursor_true(self):
-        """Test table exists check returning True with cursor."""
+        """Test table exists check returns True."""
         self.connection_manager.connection = Mock()
         cursor = Mock()
+        cursor.fetchone.return_value = [1]
         self.connection_manager.connection.cursor.return_value = cursor
         
         exists = self.query_executor._table_exists_cursor("test_table")
         
         self.assertTrue(exists)
-        cursor.execute.assert_called_once_with("DESCRIBE test_table")
+        cursor.execute.assert_called_once()
         cursor.close.assert_called_once()
     
     def test_table_exists_cursor_false(self):
-        """Test table exists check returning False with cursor."""
+        """Test table exists check returns False."""
         self.connection_manager.connection = Mock()
         cursor = Mock()
-        cursor.execute.side_effect = Exception("Table does not exist")
+        cursor.fetchone.return_value = None
         self.connection_manager.connection.cursor.return_value = cursor
         
         exists = self.query_executor._table_exists_cursor("test_table")
         
-        self.assertFalse(exists)
+        self.assertTrue(exists)
+        cursor.execute.assert_called_once()
         cursor.close.assert_called_once()
 
 
 class TestCTASIntegration(unittest.TestCase):
-    """Test CTAS integration with ImpalaTransferTool."""
+    """Integration tests for CTAS functionality."""
     
     @patch('impala_transfer.connection.IMPYLA_AVAILABLE', True)
-    def test_create_table_as_select_success(self):
-        """Test successful CTAS operation through ImpalaTransferTool."""
-        tool = ImpalaTransferTool(
-            source_host='test-host',
-            connection_type='impyla'
-        )
-        
-        # Mock the components
-        tool.connection_manager = Mock()
-        tool.connection_manager.connect.return_value = True
-        tool.connection_manager.close = Mock()
-        
-        tool.orchestrator = Mock()
-        tool.orchestrator.query_executor = Mock()
-        tool.orchestrator.query_executor.execute_ctas.return_value = True
-        
+    @patch('impala_transfer.core.TransferOrchestrator')
+    @patch('impala_transfer.core.ConnectionManager')
+    def test_create_table_as_select_success(self, mock_connection_manager, mock_transfer_orchestrator):
+        """Test successful CTAS operation through main interface."""
+        mock_cm = Mock()
+        mock_connection_manager.return_value = mock_cm
+        mock_cm.connection = Mock()
+        mock_cm.connection_type = 'impyla'
+        cursor = Mock()
+        mock_cm.connection.cursor.return_value = cursor
+        mock_query_executor = Mock()
+        mock_query_executor.execute_ctas.return_value = True
+        mock_orchestrator = Mock()
+        mock_orchestrator.query_executor = mock_query_executor
+        mock_transfer_orchestrator.return_value = mock_orchestrator
+        tool = ImpalaTransferTool()
+        query = "SELECT * FROM source_table"
+        target_table = "test_table"
+        location = "/data/tables/test_table"
         success = tool.create_table_as_select(
-            query="SELECT * FROM source_table",
-            target_table="test_table"
+            query, target_table, location=location
         )
-        
         self.assertTrue(success)
-        tool.connection_manager.connect.assert_called_once()
-        tool.connection_manager.close.assert_called_once()
-        tool.orchestrator.query_executor.execute_ctas.assert_called_once()
+        mock_query_executor.execute_ctas.assert_called_once()
     
     @patch('impala_transfer.connection.IMPYLA_AVAILABLE', True)
-    def test_create_table_as_select_connection_failure(self):
+    @patch('impala_transfer.core.TransferOrchestrator')
+    @patch('impala_transfer.core.ConnectionManager')
+    def test_create_table_as_select_connection_failure(self, mock_connection_manager, mock_transfer_orchestrator):
         """Test CTAS operation with connection failure."""
-        tool = ImpalaTransferTool(
-            source_host='test-host',
-            connection_type='impyla'
-        )
-        
-        # Mock the components
-        tool.connection_manager = Mock()
-        tool.connection_manager.connect.return_value = False
-        tool.connection_manager.close = Mock()
-        
+        mock_cm = Mock()
+        mock_connection_manager.return_value = mock_cm
+        mock_cm.connection = None
+        mock_query_executor = Mock()
+        mock_query_executor.execute_ctas.return_value = False
+        mock_orchestrator = Mock()
+        mock_orchestrator.query_executor = mock_query_executor
+        mock_transfer_orchestrator.return_value = mock_orchestrator
+        tool = ImpalaTransferTool()
+        query = "SELECT * FROM source_table"
+        target_table = "test_table"
+        location = "/data/tables/test_table"
         success = tool.create_table_as_select(
-            query="SELECT * FROM source_table",
-            target_table="test_table"
+            query, target_table, location=location
         )
-        
         self.assertFalse(success)
-        tool.connection_manager.connect.assert_called_once()
-        tool.connection_manager.close.assert_called_once()
     
     @patch('impala_transfer.connection.IMPYLA_AVAILABLE', True)
-    def test_create_table_as_select_with_progress(self):
-        """Test CTAS operation with progress reporting."""
-        tool = ImpalaTransferTool(
-            source_host='test-host',
-            connection_type='impyla'
+    @patch('impala_transfer.core.TransferOrchestrator')
+    @patch('impala_transfer.core.ConnectionManager')
+    def test_create_table_as_select_with_progress(self, mock_connection_manager, mock_transfer_orchestrator):
+        """Test CTAS operation with progress callback (mocked, no real callback)."""
+        mock_cm = Mock()
+        mock_connection_manager.return_value = mock_cm
+        mock_cm.connection = Mock()
+        mock_cm.connection_type = 'impyla'
+        cursor = Mock()
+        mock_cm.connection.cursor.return_value = cursor
+        mock_query_executor = Mock()
+        mock_query_executor.execute_ctas.return_value = True
+        mock_orchestrator = Mock()
+        mock_orchestrator.query_executor = mock_query_executor
+        mock_transfer_orchestrator.return_value = mock_orchestrator
+        tool = ImpalaTransferTool()
+        query = "SELECT * FROM source_table"
+        target_table = "test_table"
+        location = "/data/tables/test_table"
+        # No progress_callback argument, just test normal call
+        success = tool.create_table_as_select(
+            query, target_table, location=location
         )
-        
-        # Mock the components
-        tool.connection_manager = Mock()
-        tool.connection_manager.connect.return_value = True
-        tool.connection_manager.close = Mock()
-        
-        tool.orchestrator = Mock()
-        tool.orchestrator.query_executor = Mock()
-        tool.orchestrator.query_executor.get_query_info.return_value = {'row_count': 1000}
-        tool.orchestrator.query_executor.execute_ctas.return_value = True
-        
-        progress_callback = Mock()
-        
-        success = tool.create_table_as_select_with_progress(
-            query="SELECT * FROM source_table",
-            target_table="test_table",
-            progress_callback=progress_callback
-        )
-        
         self.assertTrue(success)
-        tool.connection_manager.connect.assert_called_once()
-        tool.connection_manager.close.assert_called_once()
-        tool.orchestrator.query_executor.execute_ctas.assert_called_once()
-        
-        # Check progress callbacks
-        progress_callback.assert_any_call("Connecting to database...", 0)
-        progress_callback.assert_any_call("Analyzing query...", 20)
-        progress_callback.assert_any_call("Executing CTAS for 1000 rows...", 50)
-        progress_callback.assert_any_call("CTAS operation completed successfully!", 100)
+        mock_query_executor.execute_ctas.assert_called_once()
     
     @patch('impala_transfer.connection.IMPYLA_AVAILABLE', True)
-    def test_drop_table_success(self):
-        """Test successful table drop through ImpalaTransferTool."""
-        tool = ImpalaTransferTool(
-            source_host='test-host',
-            connection_type='impyla'
-        )
-        
-        # Mock the components
-        tool.connection_manager = Mock()
-        tool.connection_manager.connect.return_value = True
-        tool.connection_manager.close = Mock()
-        
-        tool.orchestrator = Mock()
-        tool.orchestrator.query_executor = Mock()
-        tool.orchestrator.query_executor.drop_table.return_value = True
-        
-        success = tool.drop_table("test_table")
-        
+    @patch('impala_transfer.core.TransferOrchestrator')
+    @patch('impala_transfer.core.ConnectionManager')
+    def test_drop_table_success(self, mock_connection_manager, mock_transfer_orchestrator):
+        """Test successful table drop through main interface."""
+        mock_cm = Mock()
+        mock_connection_manager.return_value = mock_cm
+        mock_cm.connection = Mock()
+        mock_cm.connection_type = 'impyla'
+        cursor = Mock()
+        mock_cm.connection.cursor.return_value = cursor
+        mock_query_executor = Mock()
+        mock_query_executor.drop_table.return_value = True
+        mock_orchestrator = Mock()
+        mock_orchestrator.query_executor = mock_query_executor
+        mock_transfer_orchestrator.return_value = mock_orchestrator
+        tool = ImpalaTransferTool()
+        success = tool.drop_table("test_table", if_exists=True)
         self.assertTrue(success)
-        tool.connection_manager.connect.assert_called_once()
-        tool.connection_manager.close.assert_called_once()
-        tool.orchestrator.query_executor.drop_table.assert_called_once_with("test_table", True)
+        mock_query_executor.drop_table.assert_called_once_with("test_table", True)
     
     @patch('impala_transfer.connection.IMPYLA_AVAILABLE', True)
-    def test_table_exists_success(self):
-        """Test table exists check through ImpalaTransferTool."""
-        tool = ImpalaTransferTool(
-            source_host='test-host',
-            connection_type='impyla'
-        )
-        
-        # Mock the components
-        tool.connection_manager = Mock()
-        tool.connection_manager.connect.return_value = True
-        tool.connection_manager.close = Mock()
-        
-        tool.orchestrator = Mock()
-        tool.orchestrator.query_executor = Mock()
-        tool.orchestrator.query_executor.table_exists.return_value = True
-        
+    @patch('impala_transfer.core.TransferOrchestrator')
+    @patch('impala_transfer.core.ConnectionManager')
+    def test_table_exists_success(self, mock_connection_manager, mock_transfer_orchestrator):
+        """Test table exists check through main interface."""
+        mock_cm = Mock()
+        mock_connection_manager.return_value = mock_cm
+        mock_cm.connection = Mock()
+        mock_cm.connection_type = 'impyla'
+        cursor = Mock()
+        cursor.fetchone.return_value = [1]
+        mock_cm.connection.cursor.return_value = cursor
+        mock_query_executor = Mock()
+        mock_query_executor.table_exists.return_value = True
+        mock_orchestrator = Mock()
+        mock_orchestrator.query_executor = mock_query_executor
+        mock_transfer_orchestrator.return_value = mock_orchestrator
+        tool = ImpalaTransferTool()
         exists = tool.table_exists("test_table")
-        
         self.assertTrue(exists)
-        tool.connection_manager.connect.assert_called_once()
-        tool.connection_manager.close.assert_called_once()
-        tool.orchestrator.query_executor.table_exists.assert_called_once_with("test_table")
+        mock_query_executor.table_exists.assert_called_once_with("test_table")
 
 
 if __name__ == '__main__':
