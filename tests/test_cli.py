@@ -422,6 +422,7 @@ class TestCLI(unittest.TestCase):
         mock_args.dry_run = False
         mock_args.target_table = None
         mock_args.output_format = 'parquet'
+        mock_args.ctas = False
         mock_parser.parse_args.return_value = mock_args
         mock_create_parser.return_value = mock_parser
         
@@ -498,6 +499,7 @@ class TestCLI(unittest.TestCase):
         mock_args.dry_run = False
         mock_args.target_table = None
         mock_args.output_format = 'parquet'
+        mock_args.ctas = False
         mock_parser.parse_args.return_value = mock_args
         mock_create_parser.return_value = mock_parser
         

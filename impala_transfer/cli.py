@@ -60,6 +60,18 @@ Examples:
     parser.add_argument('--target-table', help='Target table name (defaults to table name or query_result)')
     parser.add_argument('--target-hdfs-path', help='HDFS path on cluster 2')
     
+    # CTAS arguments
+    parser.add_argument('--ctas', action='store_true', help='Use CREATE TABLE AS SELECT instead of file transfer')
+    parser.add_argument('--file-format', choices=['PARQUET', 'TEXTFILE', 'AVRO', 'ORC', 'SEQUENCEFILE'], 
+                       default='PARQUET', help='File format for CTAS table (default: PARQUET)')
+    parser.add_argument('--compression', choices=['SNAPPY', 'GZIP', 'BZIP2', 'LZO', 'NONE'], 
+                       default='SNAPPY', help='Compression format for CTAS table (default: SNAPPY)')
+    parser.add_argument('--table-location', help='HDFS location for CTAS table data')
+    parser.add_argument('--partitioned-by', nargs='+', help='Columns to partition the CTAS table by')
+    parser.add_argument('--clustered-by', nargs='+', help='Columns to cluster the CTAS table by')
+    parser.add_argument('--buckets', type=int, help='Number of buckets for clustering')
+    parser.add_argument('--overwrite', action='store_true', help='Overwrite existing table in CTAS operation')
+    
     # SCP arguments
     parser.add_argument('--scp-target-host', help='Target host for SCP transfer (if using SCP)')
     parser.add_argument('--scp-target-path', help='Target directory path for SCP transfer (if using SCP)')
@@ -253,6 +265,24 @@ def get_environment_config() -> Dict[str, Any]:
     if os.getenv('SQLALCHEMY_URL'):
         config['sqlalchemy_url'] = os.getenv('SQLALCHEMY_URL')
     
+    # CTAS configuration
+    if os.getenv('CTAS'):
+        config['ctas'] = os.getenv('CTAS').lower() == 'true'
+    if os.getenv('FILE_FORMAT'):
+        config['file_format'] = os.getenv('FILE_FORMAT')
+    if os.getenv('COMPRESSION'):
+        config['compression'] = os.getenv('COMPRESSION')
+    if os.getenv('TABLE_LOCATION'):
+        config['table_location'] = os.getenv('TABLE_LOCATION')
+    if os.getenv('PARTITIONED_BY'):
+        config['partitioned_by'] = os.getenv('PARTITIONED_BY').split(',')
+    if os.getenv('CLUSTERED_BY'):
+        config['clustered_by'] = os.getenv('CLUSTERED_BY').split(',')
+    if os.getenv('BUCKETS'):
+        config['buckets'] = int(os.getenv('BUCKETS'))
+    if os.getenv('OVERWRITE'):
+        config['overwrite'] = os.getenv('OVERWRITE').lower() == 'true'
+    
     return config
 
 
@@ -363,6 +393,26 @@ def merge_config_with_args(args: argparse.Namespace, env_config: Dict[str, Any],
         args.scp_target_host = env_config['scp_target_host']
     if not args.scp_target_path and 'scp_target_path' in env_config:
         args.scp_target_path = env_config['scp_target_path']
+    
+    # CTAS configuration
+    if not hasattr(args, 'ctas') or args.ctas is None:
+        if 'ctas' in env_config:
+            args.ctas = env_config['ctas']
+    if not args.file_format and 'file_format' in env_config:
+        args.file_format = env_config['file_format']
+    if not args.compression and 'compression' in env_config:
+        args.compression = env_config['compression']
+    if not args.table_location and 'table_location' in env_config:
+        args.table_location = env_config['table_location']
+    if not args.partitioned_by and 'partitioned_by' in env_config:
+        args.partitioned_by = env_config['partitioned_by']
+    if not args.clustered_by and 'clustered_by' in env_config:
+        args.clustered_by = env_config['clustered_by']
+    if not args.buckets and 'buckets' in env_config:
+        args.buckets = env_config['buckets']
+    if not hasattr(args, 'overwrite') or args.overwrite is None:
+        if 'overwrite' in env_config:
+            args.overwrite = env_config['overwrite']
 
 
 def setup_logging(verbose: bool) -> None:
@@ -476,12 +526,31 @@ def main() -> int:
         # Get the query to execute
         query = get_query_from_args(args)
         
-        # Execute transfer
-        success = tool.transfer_query(
-            query=query,
-            target_table=args.target_table,
-            output_format=args.output_format
-        )
+        # Handle CTAS operation
+        if args.ctas:
+            if not args.target_table:
+                logger.error("Target table name is required for CTAS operations. Use --target-table.")
+                return 2
+            
+            logger.info(f"Executing CTAS operation to create table '{args.target_table}'")
+            success = tool.create_table_as_select(
+                query=query,
+                target_table=args.target_table,
+                file_format=args.file_format,
+                compression=args.compression,
+                location=args.table_location,
+                partitioned_by=args.partitioned_by,
+                clustered_by=args.clustered_by,
+                buckets=args.buckets,
+                overwrite=args.overwrite
+            )
+        else:
+            # Execute regular transfer
+            success = tool.transfer_query(
+                query=query,
+                target_table=args.target_table,
+                output_format=args.output_format
+            )
         
         return 0 if success else 1
         

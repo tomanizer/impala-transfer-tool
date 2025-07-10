@@ -4,7 +4,7 @@ Handles query execution for different database connection types.
 """
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .connection import ConnectionManager
 
 
@@ -169,6 +169,244 @@ class QueryExecutor:
             cursor.close()
         
         return data
+    
+    def execute_ctas(self, query: str, target_table: str, 
+                    file_format: str = 'PARQUET', 
+                    compression: str = 'SNAPPY',
+                    location: Optional[str] = None,
+                    partitioned_by: Optional[List[str]] = None,
+                    clustered_by: Optional[List[str]] = None,
+                    buckets: Optional[int] = None,
+                    overwrite: bool = False) -> bool:
+        """
+        Execute CREATE TABLE AS SELECT (CTAS) operation.
+        
+        Args:
+            query: SELECT query to execute
+            target_table: Name of the table to create
+            file_format: File format for the table (PARQUET, TEXTFILE, etc.)
+            compression: Compression format (SNAPPY, GZIP, etc.)
+            location: HDFS location for the table data
+            partitioned_by: List of columns to partition by
+            clustered_by: List of columns to cluster by
+            buckets: Number of buckets for clustering
+            overwrite: Whether to overwrite existing table
+            
+        Returns:
+            bool: True if CTAS operation successful
+        """
+        if self.connection_type == "sqlalchemy":
+            return self._execute_ctas_sqlalchemy(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+        else:
+            return self._execute_ctas_cursor(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+    
+    def _execute_ctas_sqlalchemy(self, query: str, target_table: str,
+                               file_format: str, compression: str,
+                               location: Optional[str], partitioned_by: Optional[List[str]],
+                               clustered_by: Optional[List[str]], buckets: Optional[int],
+                               overwrite: bool) -> bool:
+        """Execute CTAS using SQLAlchemy."""
+        from sqlalchemy import text
+        
+        try:
+            ctas_query = self._build_ctas_query(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+            
+            logging.info(f"Executing CTAS: {ctas_query}")
+            result = self.connection_manager.connection.execute(text(ctas_query))
+            
+            # For CTAS, we don't need to fetch results, just execute
+            logging.info(f"CTAS operation completed successfully. Table '{target_table}' created.")
+            return True
+            
+        except Exception as e:
+            logging.error(f"CTAS operation failed: {e}")
+            return False
+    
+    def _execute_ctas_cursor(self, query: str, target_table: str,
+                           file_format: str, compression: str,
+                           location: Optional[str], partitioned_by: Optional[List[str]],
+                           clustered_by: Optional[List[str]], buckets: Optional[int],
+                           overwrite: bool) -> bool:
+        """Execute CTAS using cursor."""
+        cursor = self.connection_manager.connection.cursor()
+        
+        try:
+            ctas_query = self._build_ctas_query(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+            
+            logging.info(f"Executing CTAS: {ctas_query}")
+            cursor.execute(ctas_query)
+            
+            logging.info(f"CTAS operation completed successfully. Table '{target_table}' created.")
+            return True
+            
+        except Exception as e:
+            logging.error(f"CTAS operation failed: {e}")
+            return False
+        finally:
+            cursor.close()
+    
+    def _build_ctas_query(self, query: str, target_table: str,
+                         file_format: str, compression: str,
+                         location: Optional[str], partitioned_by: Optional[List[str]],
+                         clustered_by: Optional[List[str]], buckets: Optional[int],
+                         overwrite: bool) -> str:
+        """
+        Build CREATE TABLE AS SELECT query with Impala-specific options.
+        
+        Args:
+            query: SELECT query to execute
+            target_table: Name of the table to create
+            file_format: File format for the table
+            compression: Compression format
+            location: HDFS location for the table data
+            partitioned_by: List of columns to partition by
+            clustered_by: List of columns to cluster by
+            buckets: Number of buckets for clustering
+            overwrite: Whether to overwrite existing table
+            
+        Returns:
+            str: Complete CTAS query
+        """
+        # Start building the CTAS query
+        ctas_parts = []
+        
+        # Add CREATE TABLE statement
+        if overwrite:
+            ctas_parts.append(f"CREATE TABLE {target_table}")
+        else:
+            ctas_parts.append(f"CREATE TABLE IF NOT EXISTS {target_table}")
+        
+        # Add file format and compression
+        ctas_parts.append(f"STORED AS {file_format}")
+        if compression and compression.upper() != 'NONE':
+            ctas_parts.append(f"COMPRESSION '{compression}'")
+        
+        # Add location if specified
+        if location:
+            ctas_parts.append(f"LOCATION '{location}'")
+        
+        # Add partitioning if specified
+        if partitioned_by:
+            partition_cols = ', '.join(partitioned_by)
+            ctas_parts.append(f"PARTITIONED BY ({partition_cols})")
+        
+        # Add clustering if specified
+        if clustered_by and buckets:
+            cluster_cols = ', '.join(clustered_by)
+            ctas_parts.append(f"CLUSTERED BY ({cluster_cols}) INTO {buckets} BUCKETS")
+        
+        # Add the SELECT query
+        ctas_parts.append(f"AS {query}")
+        
+        return ' '.join(ctas_parts)
+    
+    def drop_table(self, table_name: str, if_exists: bool = True) -> bool:
+        """
+        Drop a table.
+        
+        Args:
+            table_name: Name of the table to drop
+            if_exists: Whether to add IF EXISTS clause
+            
+        Returns:
+            bool: True if table dropped successfully
+        """
+        if self.connection_type == "sqlalchemy":
+            return self._drop_table_sqlalchemy(table_name, if_exists)
+        else:
+            return self._drop_table_cursor(table_name, if_exists)
+    
+    def _drop_table_sqlalchemy(self, table_name: str, if_exists: bool) -> bool:
+        """Drop table using SQLAlchemy."""
+        from sqlalchemy import text
+        
+        try:
+            if if_exists:
+                drop_query = f"DROP TABLE IF EXISTS {table_name}"
+            else:
+                drop_query = f"DROP TABLE {table_name}"
+            
+            logging.info(f"Dropping table: {drop_query}")
+            self.connection_manager.connection.execute(text(drop_query))
+            logging.info(f"Table '{table_name}' dropped successfully.")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Failed to drop table '{table_name}': {e}")
+            return False
+    
+    def _drop_table_cursor(self, table_name: str, if_exists: bool) -> bool:
+        """Drop table using cursor."""
+        cursor = self.connection_manager.connection.cursor()
+        
+        try:
+            if if_exists:
+                drop_query = f"DROP TABLE IF EXISTS {table_name}"
+            else:
+                drop_query = f"DROP TABLE {table_name}"
+            
+            logging.info(f"Dropping table: {drop_query}")
+            cursor.execute(drop_query)
+            logging.info(f"Table '{table_name}' dropped successfully.")
+            return True
+            
+        except Exception as e:
+            logging.error(f"Failed to drop table '{table_name}': {e}")
+            return False
+        finally:
+            cursor.close()
+    
+    def table_exists(self, table_name: str) -> bool:
+        """
+        Check if a table exists.
+        
+        Args:
+            table_name: Name of the table to check
+            
+        Returns:
+            bool: True if table exists
+        """
+        if self.connection_type == "sqlalchemy":
+            return self._table_exists_sqlalchemy(table_name)
+        else:
+            return self._table_exists_cursor(table_name)
+    
+    def _table_exists_sqlalchemy(self, table_name: str) -> bool:
+        """Check if table exists using SQLAlchemy."""
+        from sqlalchemy import text
+        
+        try:
+            # Try to describe the table
+            describe_query = f"DESCRIBE {table_name}"
+            self.connection_manager.connection.execute(text(describe_query))
+            return True
+        except Exception:
+            return False
+    
+    def _table_exists_cursor(self, table_name: str) -> bool:
+        """Check if table exists using cursor."""
+        cursor = self.connection_manager.connection.cursor()
+        
+        try:
+            # Try to describe the table
+            cursor.execute(f"DESCRIBE {table_name}")
+            return True
+        except Exception:
+            return False
+        finally:
+            cursor.close()
     
     def test_connection(self) -> bool:
         """

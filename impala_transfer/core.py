@@ -6,7 +6,7 @@ Provides the main interface for the transfer tool.
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from .connection import ConnectionManager, get_available_connection_types, validate_connection_type
 from .chunking import ChunkProcessor
@@ -290,4 +290,149 @@ class ImpalaTransferTool:
             return True
         except Exception as e:
             logging.error(f"Configuration validation failed: {e}")
-            return False 
+            return False
+    
+    def create_table_as_select(self, query: str, target_table: str,
+                              file_format: str = 'PARQUET',
+                              compression: str = 'SNAPPY',
+                              location: Optional[str] = None,
+                              partitioned_by: Optional[List[str]] = None,
+                              clustered_by: Optional[List[str]] = None,
+                              buckets: Optional[int] = None,
+                              overwrite: bool = False) -> bool:
+        """Create a table using CREATE TABLE AS SELECT (CTAS).
+        
+        :param query: SELECT query to execute
+        :type query: str
+        :param target_table: Name of the table to create
+        :type target_table: str
+        :param file_format: File format for the table (PARQUET, TEXTFILE, etc.)
+        :type file_format: str
+        :param compression: Compression format (SNAPPY, GZIP, etc.)
+        :type compression: str
+        :param location: HDFS location for the table data
+        :type location: Optional[str]
+        :param partitioned_by: List of columns to partition by
+        :type partitioned_by: Optional[List[str]]
+        :param clustered_by: List of columns to cluster by
+        :type clustered_by: Optional[List[str]]
+        :param buckets: Number of buckets for clustering
+        :type buckets: Optional[int]
+        :param overwrite: Whether to overwrite existing table
+        :type overwrite: bool
+        :return: True if CTAS operation successful
+        :rtype: bool
+        """
+        try:
+            if not self.connection_manager.connect():
+                return False
+            
+            success = self.orchestrator.query_executor.execute_ctas(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+            
+            return success
+        finally:
+            self.connection_manager.close()
+    
+    def create_table_as_select_with_progress(self, query: str, target_table: str,
+                                           file_format: str = 'PARQUET',
+                                           compression: str = 'SNAPPY',
+                                           location: Optional[str] = None,
+                                           partitioned_by: Optional[List[str]] = None,
+                                           clustered_by: Optional[List[str]] = None,
+                                           buckets: Optional[int] = None,
+                                           overwrite: bool = False,
+                                           progress_callback: Optional[callable] = None) -> bool:
+        """Create a table using CTAS with progress reporting.
+        
+        :param query: SELECT query to execute
+        :type query: str
+        :param target_table: Name of the table to create
+        :type target_table: str
+        :param file_format: File format for the table (PARQUET, TEXTFILE, etc.)
+        :type file_format: str
+        :param compression: Compression format (SNAPPY, GZIP, etc.)
+        :type compression: str
+        :param location: HDFS location for the table data
+        :type location: Optional[str]
+        :param partitioned_by: List of columns to partition by
+        :type partitioned_by: Optional[List[str]]
+        :param clustered_by: List of columns to cluster by
+        :type clustered_by: Optional[List[str]]
+        :param buckets: Number of buckets for clustering
+        :type buckets: Optional[int]
+        :param overwrite: Whether to overwrite existing table
+        :type overwrite: bool
+        :param progress_callback: Callback function for progress updates
+        :type progress_callback: Optional[callable]
+        :return: True if CTAS operation successful
+        :rtype: bool
+        """
+        try:
+            if progress_callback:
+                progress_callback("Connecting to database...", 0)
+            
+            if not self.connection_manager.connect():
+                return False
+            
+            if progress_callback:
+                progress_callback("Analyzing query...", 20)
+            
+            # Get query info to estimate progress
+            query_info = self.orchestrator.query_executor.get_query_info(query)
+            
+            if progress_callback:
+                progress_callback(f"Executing CTAS for {query_info['row_count']} rows...", 50)
+            
+            success = self.orchestrator.query_executor.execute_ctas(
+                query, target_table, file_format, compression, location,
+                partitioned_by, clustered_by, buckets, overwrite
+            )
+            
+            if progress_callback:
+                if success:
+                    progress_callback("CTAS operation completed successfully!", 100)
+                else:
+                    progress_callback("CTAS operation failed!", -1)
+            
+            return success
+        finally:
+            self.connection_manager.close()
+    
+    def drop_table(self, table_name: str, if_exists: bool = True) -> bool:
+        """Drop a table.
+        
+        :param table_name: Name of the table to drop
+        :type table_name: str
+        :param if_exists: Whether to add IF EXISTS clause
+        :type if_exists: bool
+        :return: True if table dropped successfully
+        :rtype: bool
+        """
+        try:
+            if not self.connection_manager.connect():
+                return False
+            
+            success = self.orchestrator.query_executor.drop_table(table_name, if_exists)
+            return success
+        finally:
+            self.connection_manager.close()
+    
+    def table_exists(self, table_name: str) -> bool:
+        """Check if a table exists.
+        
+        :param table_name: Name of the table to check
+        :type table_name: str
+        :return: True if table exists
+        :rtype: bool
+        """
+        try:
+            if not self.connection_manager.connect():
+                return False
+            
+            exists = self.orchestrator.query_executor.table_exists(table_name)
+            return exists
+        finally:
+            self.connection_manager.close() 
