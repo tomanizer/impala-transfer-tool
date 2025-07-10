@@ -970,7 +970,317 @@ def good_vectorized_alternative(data: np.ndarray) -> np.ndarray:
 
 ## 📊 Table Data Operations Standards
 
-### 1. **Pandas with PyArrow Backend**
+### 1. **Filesystem Operations with fsspec**
+
+#### Core Principle
+**Always use fsspec and fsspec filesystems for filesystem operations and interactions with HDFS, S3, and other storage backends**. This provides a unified interface for different storage systems and ensures consistent behavior across platforms.
+
+#### fsspec Guidelines
+- **Unified Interface**: Use fsspec for all filesystem operations regardless of backend
+- **Protocol Support**: Leverage fsspec's support for multiple protocols (file://, hdfs://, s3://, gcs://, etc.)
+- **Caching**: Utilize fsspec's caching capabilities for improved performance
+- **Compression**: Use fsspec's built-in compression support
+- **Parallel Operations**: Take advantage of fsspec's parallel read/write capabilities
+
+#### Implementation Examples
+```python
+import fsspec
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+from typing import Optional, Dict, Any
+
+# ✅ GOOD - fsspec for unified filesystem operations
+def read_data_with_fsspec(filepath: str, **kwargs) -> pd.DataFrame:
+    """Read data using fsspec for unified filesystem access.
+    
+    This function demonstrates the use of fsspec for reading data
+    from various storage backends (local, HDFS, S3, GCS, etc.)
+    with a unified interface.
+    
+    :param filepath: Path to data file (supports multiple protocols)
+    :type filepath: str
+    :param kwargs: Additional arguments for fsspec
+    :type kwargs: Dict[str, Any]
+    :return: DataFrame with data from file
+    :rtype: pd.DataFrame
+    
+    :Example:
+        Read from different storage backends:
+        
+        >>> # Local file
+        >>> df = read_data_with_fsspec("file:///path/to/data.parquet")
+        
+        >>> # HDFS file
+        >>> df = read_data_with_fsspec("hdfs://cluster/path/to/data.parquet")
+        
+        >>> # S3 file
+        >>> df = read_data_with_fsspec("s3://bucket/path/to/data.parquet")
+        
+        >>> # GCS file
+        >>> df = read_data_with_fsspec("gcs://bucket/path/to/data.parquet")
+    """
+    # Use fsspec for unified filesystem access
+    with fsspec.open(filepath, mode='rb', **kwargs) as f:
+        if filepath.endswith('.parquet'):
+            # Use PyArrow for Parquet files
+            table = pq.read_table(f)
+            return table.to_pandas()
+        elif filepath.endswith('.csv'):
+            # Use pandas with fsspec
+            return pd.read_csv(f, engine='pyarrow')
+        else:
+            raise ValueError(f"Unsupported file format: {filepath}")
+
+# ✅ GOOD - fsspec for writing data
+def write_data_with_fsspec(data: pd.DataFrame, filepath: str, **kwargs) -> None:
+    """Write data using fsspec for unified filesystem access.
+    
+    :param data: DataFrame to write
+    :type data: pd.DataFrame
+    :param filepath: Output file path (supports multiple protocols)
+    :type filepath: str
+    :param kwargs: Additional arguments for fsspec
+    :type kwargs: Dict[str, Any]
+    """
+    # Use fsspec for unified filesystem access
+    with fsspec.open(filepath, mode='wb', **kwargs) as f:
+        if filepath.endswith('.parquet'):
+            # Use PyArrow for Parquet files
+            table = pa.Table.from_pandas(data)
+            pq.write_table(table, f, compression='snappy')
+        elif filepath.endswith('.csv'):
+            # Use pandas with fsspec
+            data.to_csv(f, index=False)
+        else:
+            raise ValueError(f"Unsupported file format: {filepath}")
+
+# ✅ GOOD - fsspec filesystem for complex operations
+def process_data_with_fsspec_fs(input_path: str, output_path: str, **kwargs) -> None:
+    """Process data using fsspec filesystem for complex operations.
+    
+    :param input_path: Input file path
+    :type input_path: str
+    :param output_path: Output file path
+    :type output_path: str
+    :param kwargs: Additional arguments for fsspec
+    :type kwargs: Dict[str, Any]
+    """
+    # Create filesystem instance
+    fs = fsspec.filesystem(input_path, **kwargs)
+    
+    # Check if file exists
+    if not fs.exists(input_path):
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+    
+    # Get file size for progress tracking
+    file_size = fs.size(input_path)
+    
+    # Read data in chunks for large files
+    chunk_size = 1024 * 1024  # 1MB chunks
+    with fs.open(input_path, mode='rb') as f_in:
+        with fsspec.open(output_path, mode='wb', **kwargs) as f_out:
+            while True:
+                chunk = f_in.read(chunk_size)
+                if not chunk:
+                    break
+                f_out.write(chunk)
+
+# ✅ GOOD - fsspec with caching for performance
+def read_data_with_caching(filepath: str, cache_dir: Optional[str] = None) -> pd.DataFrame:
+    """Read data with fsspec caching for improved performance.
+    
+    :param filepath: Path to data file
+    :type filepath: str
+    :param cache_dir: Directory for caching (optional)
+    :type cache_dir: Optional[str]
+    :return: DataFrame with data
+    :rtype: pd.DataFrame
+    """
+    # Configure caching
+    cache_kwargs = {}
+    if cache_dir:
+        cache_kwargs['cache_storage'] = cache_dir
+    
+    # Use fsspec with caching
+    with fsspec.open(filepath, mode='rb', **cache_kwargs) as f:
+        if filepath.endswith('.parquet'):
+            table = pq.read_table(f)
+            return table.to_pandas()
+        else:
+            return pd.read_csv(f, engine='pyarrow')
+
+# ✅ GOOD - fsspec for parallel operations
+def parallel_read_with_fsspec(filepaths: list, max_workers: int = 4) -> list:
+    """Read multiple files in parallel using fsspec.
+    
+    :param filepaths: List of file paths to read
+    :type filepaths: list
+    :param max_workers: Maximum number of parallel workers
+    :type max_workers: int
+    :return: List of DataFrames
+    :rtype: list
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    
+    def read_single_file(filepath: str) -> pd.DataFrame:
+        """Read a single file."""
+        return read_data_with_fsspec(filepath)
+    
+    # Use ThreadPoolExecutor for parallel reading
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(read_single_file, filepaths))
+    
+    return results
+
+# ✅ GOOD - fsspec for HDFS operations
+def hdfs_operations_with_fsspec(hdfs_path: str, **kwargs) -> None:
+    """Perform HDFS operations using fsspec.
+    
+    :param hdfs_path: HDFS path
+    :type hdfs_path: str
+    :param kwargs: Additional arguments for HDFS connection
+    :type kwargs: Dict[str, Any]
+    """
+    # Create HDFS filesystem
+    fs = fsspec.filesystem('hdfs', **kwargs)
+    
+    # List files
+    files = fs.ls(hdfs_path)
+    
+    # Check if directory exists
+    if fs.exists(hdfs_path):
+        # Create directory if needed
+        fs.makedirs(hdfs_path, exist_ok=True)
+    
+    # Copy files
+    fs.copy('local_file.txt', f"{hdfs_path}/remote_file.txt")
+    
+    # Remove files
+    fs.rm(f"{hdfs_path}/old_file.txt")
+
+# ✅ GOOD - fsspec for S3 operations
+def s3_operations_with_fsspec(s3_path: str, **kwargs) -> None:
+    """Perform S3 operations using fsspec.
+    
+    :param s3_path: S3 path (s3://bucket/path)
+    :type s3_path: str
+    :param kwargs: Additional arguments for S3 connection
+    :type kwargs: Dict[str, Any]
+    """
+    # Create S3 filesystem
+    fs = fsspec.filesystem('s3', **kwargs)
+    
+    # List objects
+    objects = fs.ls(s3_path)
+    
+    # Upload file
+    fs.put('local_file.txt', f"{s3_path}/remote_file.txt")
+    
+    # Download file
+    fs.get(f"{s3_path}/remote_file.txt", 'local_file.txt')
+    
+    # Check if object exists
+    if fs.exists(f"{s3_path}/file.txt"):
+        # Get object info
+        info = fs.info(f"{s3_path}/file.txt")
+        print(f"File size: {info['size']} bytes")
+
+# ❌ BAD - Direct filesystem operations without fsspec
+def bad_direct_filesystem_operations(filepath: str) -> pd.DataFrame:
+    """Bad example: direct filesystem operations without fsspec."""
+    # This approach doesn't work for remote filesystems
+    with open(filepath, 'rb') as f:  # ❌ Only works for local files
+        return pd.read_parquet(f)
+
+# ❌ BAD - Hardcoded storage backends
+def bad_hardcoded_storage(filepath: str) -> pd.DataFrame:
+    """Bad example: hardcoded storage backend handling."""
+    if filepath.startswith('s3://'):
+        # Hardcoded S3 handling
+        import boto3
+        s3 = boto3.client('s3')
+        # Complex S3-specific code...
+    elif filepath.startswith('hdfs://'):
+        # Hardcoded HDFS handling
+        from hdfs import InsecureClient
+        client = InsecureClient('http://localhost:50070')
+        # Complex HDFS-specific code...
+    else:
+        # Local file handling
+        with open(filepath, 'rb') as f:
+            return pd.read_parquet(f)
+```
+
+#### fsspec Configuration
+```python
+# ✅ GOOD - fsspec configuration for different backends
+def configure_fsspec_for_backend(backend: str, **kwargs) -> Dict[str, Any]:
+    """Configure fsspec for specific storage backend.
+    
+    :param backend: Storage backend ('s3', 'hdfs', 'gcs', etc.)
+    :type backend: str
+    :param kwargs: Backend-specific configuration
+    :type kwargs: Dict[str, Any]
+    :return: Configuration dictionary
+    :rtype: Dict[str, Any]
+    """
+    configs = {
+        's3': {
+            'key': kwargs.get('aws_access_key_id'),
+            'secret': kwargs.get('aws_secret_access_key'),
+            'token': kwargs.get('aws_session_token'),
+            'region': kwargs.get('aws_region', 'us-east-1'),
+            'endpoint_url': kwargs.get('endpoint_url'),
+            'use_ssl': kwargs.get('use_ssl', True)
+        },
+        'hdfs': {
+            'host': kwargs.get('hdfs_host', 'localhost'),
+            'port': kwargs.get('hdfs_port', 50070),
+            'user': kwargs.get('hdfs_user'),
+            'kerberos': kwargs.get('kerberos', False)
+        },
+        'gcs': {
+            'token': kwargs.get('gcs_token'),
+            'project': kwargs.get('gcs_project'),
+            'access': kwargs.get('gcs_access', 'read_write')
+        }
+    }
+    
+    return configs.get(backend, {})
+
+# ✅ GOOD - Environment-based fsspec configuration
+def get_fsspec_config_from_env() -> Dict[str, Any]:
+    """Get fsspec configuration from environment variables.
+    
+    :return: Configuration dictionary
+    :rtype: Dict[str, Any]
+    """
+    import os
+    
+    config = {}
+    
+    # S3 configuration
+    if os.getenv('AWS_ACCESS_KEY_ID'):
+        config['key'] = os.getenv('AWS_ACCESS_KEY_ID')
+        config['secret'] = os.getenv('AWS_SECRET_ACCESS_KEY')
+        config['token'] = os.getenv('AWS_SESSION_TOKEN')
+        config['region'] = os.getenv('AWS_REGION', 'us-east-1')
+    
+    # HDFS configuration
+    if os.getenv('HDFS_HOST'):
+        config['host'] = os.getenv('HDFS_HOST')
+        config['port'] = int(os.getenv('HDFS_PORT', '50070'))
+        config['user'] = os.getenv('HDFS_USER')
+    
+    # GCS configuration
+    if os.getenv('GOOGLE_APPLICATION_CREDENTIALS'):
+        config['token'] = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+    
+    return config
+```
+
+### 2. **Pandas with PyArrow Backend**
 
 #### Core Principle
 **Always use PyArrow as the backend for pandas operations** when working with table data. This provides significant performance improvements and better memory efficiency.

@@ -35,7 +35,10 @@ class ImpalaTransferTool:
                  odbc_driver: Optional[str] = None,
                  odbc_connection_string: Optional[str] = None,
                  sqlalchemy_url: Optional[str] = None,
-                 sqlalchemy_engine_kwargs: Optional[dict] = None):
+                 sqlalchemy_engine_kwargs: Optional[dict] = None,
+                 use_distcp: bool = True,
+                 source_hdfs_path: Optional[str] = None,
+                 target_cluster: Optional[str] = None):
         """Initialize the transfer tool.
         
         :param source_host: Database host for cluster 1 (not needed for SQLAlchemy URL)
@@ -79,7 +82,9 @@ class ImpalaTransferTool:
         
         self.connection_manager = ConnectionManager(self.connection_type, **connection_kwargs)
         self.chunk_processor = ChunkProcessor(chunk_size, temp_dir)
-        self.file_transfer_manager = FileTransferManager(target_hdfs_path)
+        self.file_transfer_manager = FileTransferManager(
+            target_hdfs_path, use_distcp, source_hdfs_path, target_cluster
+        )
         self.orchestrator = TransferOrchestrator(
             self.connection_manager, self.chunk_processor, 
             self.file_transfer_manager, max_workers

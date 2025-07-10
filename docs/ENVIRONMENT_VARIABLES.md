@@ -28,6 +28,12 @@ The Impala Transfer Tool supports configuration via environment variables. This 
 - `TARGET_HDFS_PATH` - HDFS path on target cluster for data landing
 - `OUTPUT_FORMAT` - Output format ("parquet" or "csv", default: "parquet")
 
+## Distcp Configuration
+
+- `USE_DISTCP` - Whether to use distcp for cross-cluster transfers (default: "true")
+- `SOURCE_HDFS_PATH` - Source HDFS path (required for distcp transfers)
+- `TARGET_CLUSTER` - Target cluster name/address (required for distcp transfers)
+
 ## Usage Examples
 
 ### Basic Impala Connection
@@ -63,6 +69,32 @@ export TARGET_HDFS_PATH=/user/data/landing
 export OUTPUT_FORMAT=csv
 
 impala-transfer --query "SELECT * FROM users WHERE created_at >= '2024-01-01'"
+```
+
+### Cross-Cluster Transfer with Distcp
+```bash
+export USE_DISTCP=true
+export SOURCE_HDFS_PATH=/data/source
+export TARGET_CLUSTER=cluster2.example.com
+export TARGET_HDFS_PATH=/data/target
+export CHUNK_SIZE=2000000
+export MAX_WORKERS=8
+
+impala-transfer \
+    --source-host cluster1.example.com \
+    --query "SELECT * FROM large_table WHERE date = '2024-01-01'"
+```
+
+### Single-Cluster Transfer (HDFS Put)
+```bash
+export USE_DISTCP=false
+export TARGET_HDFS_PATH=/tmp/test_data
+export CHUNK_SIZE=100000
+export MAX_WORKERS=2
+
+impala-transfer \
+    --source-host localhost \
+    --query "SELECT * FROM test_table LIMIT 1000"
 ```
 
 ### Using ODBC Connection String
@@ -129,6 +161,9 @@ This means that command line arguments will override environment variables, whic
 | CHUNK_SIZE          | Number of rows per chunk                    | 1000000                       |
 | MAX_WORKERS         | Number of parallel workers                  | 4                             |
 | OUTPUT_FORMAT       | Output format (parquet, csv)                | parquet                       |
+| USE_DISTCP          | Use distcp for cross-cluster transfers      | true                          |
+| SOURCE_HDFS_PATH    | Source HDFS path (for distcp)               | /data/source                  |
+| TARGET_CLUSTER      | Target cluster name/address (for distcp)    | cluster2.example.com          |
 | ODBC_DRIVER         | ODBC driver name                            | ODBC Driver 17 for SQL Server |
 | ODBC_CONNECTION_STRING | Full ODBC connection string               | ...                           |
 | SQLALCHEMY_URL      | SQLAlchemy connection URL                   | postgresql://...              |
