@@ -529,7 +529,386 @@ jobs:
 
 ## 🚀 Performance and Programming Style Standards
 
-### 1. **Performance Optimization with Vectorized Operations**
+### 1. **Path Operations with pathlib**
+
+#### Core Principle
+**Always use pathlib operations or universal pathlib operations for path handling** instead of string concatenation or os.path operations. This provides better cross-platform compatibility, type safety, and more readable code.
+
+#### pathlib Guidelines
+- **Use pathlib.Path**: Prefer `pathlib.Path` over string paths and `os.path` functions
+- **Universal pathlib**: Use `pathlib.PurePath` for cross-platform path manipulation
+- **Type safety**: Path objects provide better type checking and IDE support
+- **Method chaining**: Leverage pathlib's fluent interface for complex path operations
+- **Cross-platform**: pathlib handles path separators automatically across operating systems
+
+#### Implementation Examples
+```python
+from pathlib import Path, PurePath
+from typing import Union, List
+
+# ✅ GOOD - pathlib for path operations
+def process_data_files(data_dir: Union[str, Path], output_dir: Union[str, Path]) -> None:
+    """Process data files using pathlib for robust path handling.
+    
+    This function demonstrates the use of pathlib for safe and cross-platform
+    path operations, avoiding string concatenation and os.path functions.
+    
+    :param data_dir: Input data directory path
+    :type data_dir: Union[str, Path]
+    :param output_dir: Output directory path
+    :type output_dir: Union[str, Path]
+    
+    :Example:
+        Process files in different locations:
+        
+        >>> process_data_files("/data/input", "/data/output")
+        >>> process_data_files(Path("/data/input"), Path("/data/output"))
+        >>> process_data_files("s3://bucket/data", "hdfs://cluster/output")
+    """
+    # Convert to Path objects for consistent handling
+    data_path = Path(data_dir)
+    output_path = Path(output_dir)
+    
+    # Create output directory if it doesn't exist
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Find all data files using pathlib glob
+    data_files = list(data_path.glob("*.parquet"))
+    
+    for file_path in data_files:
+        # Use pathlib for path manipulation
+        relative_path = file_path.relative_to(data_path)
+        output_file = output_path / relative_path.with_suffix('.processed.parquet')
+        
+        # Ensure output subdirectory exists
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Process file
+        process_single_file(file_path, output_file)
+
+# ✅ GOOD - Universal pathlib for cross-platform operations
+def create_standardized_paths(base_path: Union[str, Path]) -> dict:
+    """Create standardized paths using universal pathlib operations.
+    
+    :param base_path: Base directory path
+    :type base_path: Union[str, Path]
+    :return: Dictionary of standardized paths
+    :rtype: dict
+    """
+    # Use PurePath for cross-platform path manipulation
+    base = PurePath(base_path)
+    
+    paths = {
+        'data': base / 'data',
+        'logs': base / 'logs',
+        'temp': base / 'temp',
+        'config': base / 'config',
+        'output': base / 'output'
+    }
+    
+    # Add subdirectories with proper path joining
+    paths['processed'] = paths['data'] / 'processed'
+    paths['raw'] = paths['data'] / 'raw'
+    paths['archived'] = paths['data'] / 'archived'
+    
+    return paths
+
+# ✅ GOOD - pathlib for file operations
+def safe_file_operations(file_path: Union[str, Path]) -> None:
+    """Perform safe file operations using pathlib.
+    
+    :param file_path: Path to file
+    :type file_path: Union[str, Path]
+    """
+    path = Path(file_path)
+    
+    # Check if file exists
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+    
+    # Get file information using pathlib
+    file_size = path.stat().st_size
+    file_modified = path.stat().st_mtime
+    
+    # Create backup path
+    backup_path = path.with_suffix('.backup')
+    
+    # Copy file using pathlib
+    import shutil
+    shutil.copy2(path, backup_path)
+    
+    # Verify backup was created
+    if not backup_path.exists():
+        raise RuntimeError(f"Failed to create backup: {backup_path}")
+
+# ✅ GOOD - pathlib for directory operations
+def setup_workspace_directories(workspace_path: Union[str, Path]) -> None:
+    """Setup workspace directories using pathlib.
+    
+    :param workspace_path: Workspace root path
+    :type workspace_path: Union[str, Path]
+    """
+    workspace = Path(workspace_path)
+    
+    # Define directory structure
+    directories = [
+        workspace / 'data' / 'raw',
+        workspace / 'data' / 'processed',
+        workspace / 'data' / 'archived',
+        workspace / 'logs',
+        workspace / 'temp',
+        workspace / 'config',
+        workspace / 'output'
+    ]
+    
+    # Create all directories
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+    
+    # Create .gitkeep files to preserve empty directories
+    for directory in directories:
+        gitkeep_file = directory / '.gitkeep'
+        if not gitkeep_file.exists():
+            gitkeep_file.touch()
+
+# ✅ GOOD - pathlib for pattern matching
+def find_files_by_pattern(directory: Union[str, Path], patterns: List[str]) -> List[Path]:
+    """Find files matching patterns using pathlib.
+    
+    :param directory: Directory to search
+    :type directory: Union[str, Path]
+    :param patterns: List of glob patterns to match
+    :type patterns: List[str]
+    :return: List of matching file paths
+    :rtype: List[Path]
+    """
+    dir_path = Path(directory)
+    
+    if not dir_path.exists():
+        raise FileNotFoundError(f"Directory not found: {dir_path}")
+    
+    if not dir_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {dir_path}")
+    
+    matching_files = []
+    
+    for pattern in patterns:
+        # Use pathlib glob for pattern matching
+        files = dir_path.glob(pattern)
+        matching_files.extend(files)
+    
+    # Remove duplicates and sort
+    return sorted(set(matching_files))
+
+# ✅ GOOD - pathlib for path validation
+def validate_path_structure(base_path: Union[str, Path]) -> bool:
+    """Validate path structure using pathlib.
+    
+    :param base_path: Base path to validate
+    :type base_path: Union[str, Path]
+    :return: True if structure is valid
+    :rtype: bool
+    """
+    base = Path(base_path)
+    
+    # Check if base path exists
+    if not base.exists():
+        return False
+    
+    # Define required subdirectories
+    required_dirs = ['data', 'logs', 'config']
+    
+    for required_dir in required_dirs:
+        dir_path = base / required_dir
+        if not dir_path.exists() or not dir_path.is_dir():
+            return False
+    
+    # Check for required files
+    required_files = ['config.json', 'README.md']
+    
+    for required_file in required_files:
+        file_path = base / required_file
+        if not file_path.exists() or not file_path.is_file():
+            return False
+    
+    return True
+
+# ✅ GOOD - pathlib for temporary file handling
+def create_temp_workspace(base_dir: Union[str, Path] = None) -> Path:
+    """Create temporary workspace using pathlib.
+    
+    :param base_dir: Base directory for temporary workspace
+    :type base_dir: Union[str, Path]
+    :return: Path to temporary workspace
+    :rtype: Path
+    """
+    import tempfile
+    import uuid
+    
+    if base_dir is None:
+        base_dir = Path(tempfile.gettempdir())
+    else:
+        base_dir = Path(base_dir)
+    
+    # Create unique temporary directory
+    temp_name = f"impala_transfer_{uuid.uuid4().hex[:8]}"
+    temp_path = base_dir / temp_name
+    
+    # Create directory structure
+    temp_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create subdirectories
+    (temp_path / 'data').mkdir(exist_ok=True)
+    (temp_path / 'logs').mkdir(exist_ok=True)
+    (temp_path / 'temp').mkdir(exist_ok=True)
+    
+    return temp_path
+
+# ✅ GOOD - pathlib for configuration file handling
+def load_config_from_path(config_path: Union[str, Path]) -> dict:
+    """Load configuration from file using pathlib.
+    
+    :param config_path: Path to configuration file
+    :type config_path: Union[str, Path]
+    :return: Configuration dictionary
+    :rtype: dict
+    """
+    path = Path(config_path)
+    
+    # Validate file exists and is readable
+    if not path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {path}")
+    
+    if not path.is_file():
+        raise ValueError(f"Path is not a file: {path}")
+    
+    if not path.is_readable():
+        raise PermissionError(f"Configuration file not readable: {path}")
+    
+    # Read file content
+    try:
+        with path.open('r', encoding='utf-8') as f:
+            import json
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in configuration file {path}: {e}")
+
+# ❌ BAD - String concatenation for paths
+def bad_string_path_operations(base_path: str, filename: str) -> str:
+    """Bad example: using string concatenation for paths."""
+    # Platform-specific path separator issues
+    if base_path.endswith('/'):
+        return base_path + filename
+    else:
+        return base_path + '/' + filename
+
+# ❌ BAD - os.path operations
+def bad_os_path_operations(base_path: str, filename: str) -> str:
+    """Bad example: using os.path instead of pathlib."""
+    import os
+    # Less readable and more verbose
+    return os.path.join(base_path, filename)
+
+# ✅ GOOD - pathlib alternative
+def good_pathlib_operations(base_path: Union[str, Path], filename: str) -> Path:
+    """Good example: using pathlib for path operations."""
+    base = Path(base_path)
+    return base / filename
+```
+
+#### pathlib Best Practices
+```python
+# ✅ GOOD - Type hints with pathlib
+from pathlib import Path
+from typing import Union, List, Optional
+
+def process_files(
+    input_dir: Union[str, Path],
+    output_dir: Union[str, Path],
+    file_pattern: str = "*.parquet"
+) -> List[Path]:
+    """Process files with proper pathlib type hints.
+    
+    :param input_dir: Input directory path
+    :type input_dir: Union[str, Path]
+    :param output_dir: Output directory path
+    :type output_dir: Union[str, Path]
+    :param file_pattern: File pattern to match
+    :type file_pattern: str
+    :return: List of processed file paths
+    :rtype: List[Path]
+    """
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    
+    # Ensure output directory exists
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Find matching files
+    input_files = list(input_path.glob(file_pattern))
+    
+    processed_files = []
+    for file_path in input_files:
+        # Create output file path
+        output_file = output_path / file_path.name
+        
+        # Process file
+        process_single_file(file_path, output_file)
+        processed_files.append(output_file)
+    
+    return processed_files
+
+# ✅ GOOD - pathlib with error handling
+def safe_path_operations(path: Union[str, Path]) -> Optional[Path]:
+    """Safe path operations with proper error handling.
+    
+    :param path: Path to operate on
+    :type path: Union[str, Path]
+    :return: Path object if valid, None otherwise
+    :rtype: Optional[Path]
+    """
+    try:
+        path_obj = Path(path)
+        
+        # Resolve path to handle symlinks and relative paths
+        resolved_path = path_obj.resolve()
+        
+        # Check if path exists and is accessible
+        if not resolved_path.exists():
+            return None
+        
+        return resolved_path
+        
+    except (OSError, RuntimeError) as e:
+        # Log error and return None
+        logger.error(f"Path operation failed for {path}: {e}")
+        return None
+
+# ✅ GOOD - pathlib for cross-platform compatibility
+def create_cross_platform_paths() -> dict:
+    """Create paths that work across different operating systems.
+    
+    :return: Dictionary of cross-platform paths
+    :rtype: dict
+    """
+    # Use PurePath for cross-platform path manipulation
+    from pathlib import PurePath
+    
+    # Base paths that work on any platform
+    base = PurePath('data')
+    
+    paths = {
+        'input': base / 'input',
+        'output': base / 'output',
+        'temp': base / 'temp',
+        'logs': base / 'logs'
+    }
+    
+    # Convert to platform-specific Path when needed
+    return {k: Path(v) for k, v in paths.items()}
+```
+
+### 2. **Performance Optimization with Vectorized Operations**
 
 #### Core Principle
 **Prefer vectorized operations over pure Python loops** for data processing tasks. Use NumPy, Pandas, and PyArrow extensively for optimal performance.
