@@ -60,6 +60,18 @@ Examples:
     parser.add_argument('--target-table', help='Target table name (defaults to table name or query_result)')
     parser.add_argument('--target-hdfs-path', help='HDFS path on cluster 2')
     
+    # SCP arguments
+    parser.add_argument('--scp-target-host', help='Target host for SCP transfer (if using SCP)')
+    parser.add_argument('--scp-target-path', help='Target directory path for SCP transfer (if using SCP)')
+    
+    # Distcp arguments
+    parser.add_argument('--use-distcp', action='store_true', default=True, 
+                       help='Use distcp for cross-cluster transfers (default: True)')
+    parser.add_argument('--no-distcp', dest='use_distcp', action='store_false',
+                       help='Disable distcp and use hdfs put instead')
+    parser.add_argument('--source-hdfs-path', help='Source HDFS path (required for distcp)')
+    parser.add_argument('--target-cluster', help='Target cluster name/address (required for distcp)')
+    
     # Processing arguments
     parser.add_argument('--chunk-size', type=int, default=1000000, help='Rows per chunk')
     parser.add_argument('--max-workers', type=int, default=4, help='Number of parallel workers')
@@ -219,6 +231,20 @@ def get_environment_config() -> Dict[str, Any]:
     if os.getenv('OUTPUT_FORMAT'):
         config['output_format'] = os.getenv('OUTPUT_FORMAT')
     
+    # Distcp configuration
+    if os.getenv('USE_DISTCP'):
+        config['use_distcp'] = os.getenv('USE_DISTCP').lower() == 'true'
+    if os.getenv('SOURCE_HDFS_PATH'):
+        config['source_hdfs_path'] = os.getenv('SOURCE_HDFS_PATH')
+    if os.getenv('TARGET_CLUSTER'):
+        config['target_cluster'] = os.getenv('TARGET_CLUSTER')
+    
+    # SCP configuration
+    if os.getenv('SCP_TARGET_HOST'):
+        config['scp_target_host'] = os.getenv('SCP_TARGET_HOST')
+    if os.getenv('SCP_TARGET_PATH'):
+        config['scp_target_path'] = os.getenv('SCP_TARGET_PATH')
+    
     # Connection-specific environment variables
     if os.getenv('ODBC_DRIVER'):
         config['odbc_driver'] = os.getenv('ODBC_DRIVER')
@@ -322,6 +348,21 @@ def merge_config_with_args(args: argparse.Namespace, env_config: Dict[str, Any],
         args.odbc_connection_string = env_config['odbc_connection_string']
     if not args.sqlalchemy_url and 'sqlalchemy_url' in env_config:
         args.sqlalchemy_url = env_config['sqlalchemy_url']
+    
+    # Distcp configuration
+    if not hasattr(args, 'use_distcp') or args.use_distcp is None:
+        if 'use_distcp' in env_config:
+            args.use_distcp = env_config['use_distcp']
+    if not args.source_hdfs_path and 'source_hdfs_path' in env_config:
+        args.source_hdfs_path = env_config['source_hdfs_path']
+    if not args.target_cluster and 'target_cluster' in env_config:
+        args.target_cluster = env_config['target_cluster']
+
+    # SCP configuration
+    if not args.scp_target_host and 'scp_target_host' in env_config:
+        args.scp_target_host = env_config['scp_target_host']
+    if not args.scp_target_path and 'scp_target_path' in env_config:
+        args.scp_target_path = env_config['scp_target_path']
 
 
 def setup_logging(verbose: bool) -> None:
@@ -382,7 +423,12 @@ def main() -> int:
             odbc_driver=args.odbc_driver,
             odbc_connection_string=args.odbc_connection_string,
             sqlalchemy_url=args.sqlalchemy_url,
-            sqlalchemy_engine_kwargs=sqlalchemy_engine_kwargs
+            sqlalchemy_engine_kwargs=sqlalchemy_engine_kwargs,
+            use_distcp=args.use_distcp,
+            source_hdfs_path=args.source_hdfs_path,
+            target_cluster=args.target_cluster,
+            scp_target_host=args.scp_target_host,
+            scp_target_path=args.scp_target_path
         )
         
         # Handle utility commands
