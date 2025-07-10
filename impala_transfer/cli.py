@@ -61,12 +61,10 @@ Examples:
     parser.add_argument('--target-hdfs-path', help='HDFS path on cluster 2')
     
     # CTAS arguments
-    parser.add_argument('--ctas', action='store_true', help='Use CREATE TABLE AS SELECT instead of file transfer')
-    parser.add_argument('--file-format', choices=['PARQUET', 'TEXTFILE', 'AVRO', 'ORC', 'SEQUENCEFILE'], 
-                       default='PARQUET', help='File format for CTAS table (default: PARQUET)')
+    parser.add_argument('--ctas', action='store_true', help='Use CREATE TABLE AS SELECT (CTAS) instead of file transfer')
     parser.add_argument('--compression', choices=['SNAPPY', 'GZIP', 'BZIP2', 'LZO', 'NONE'], 
                        default='SNAPPY', help='Compression format for CTAS table (default: SNAPPY)')
-    parser.add_argument('--table-location', help='HDFS location for CTAS table data')
+    parser.add_argument('--table-location', required=False, help='HDFS location for CTAS table data (REQUIRED for CTAS)')
     parser.add_argument('--partitioned-by', nargs='+', help='Columns to partition the CTAS table by')
     parser.add_argument('--clustered-by', nargs='+', help='Columns to cluster the CTAS table by')
     parser.add_argument('--buckets', type=int, help='Number of buckets for clustering')
@@ -142,6 +140,13 @@ def validate_arguments(args: argparse.Namespace) -> None:
             json.loads(args.sqlalchemy_engine_kwargs)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in --sqlalchemy-engine-kwargs: {e}")
+
+    # CTAS specific validations
+    if args.ctas:
+        if not args.table_location:
+            raise ValueError("HDFS table location (--table-location) is required for CTAS operations.")
+        if not args.target_table:
+            raise ValueError("Target table name is required for CTAS operations. Use --target-table.")
 
 
 def get_query_from_args(args: argparse.Namespace) -> str:
@@ -268,8 +273,6 @@ def get_environment_config() -> Dict[str, Any]:
     # CTAS configuration
     if os.getenv('CTAS'):
         config['ctas'] = os.getenv('CTAS').lower() == 'true'
-    if os.getenv('FILE_FORMAT'):
-        config['file_format'] = os.getenv('FILE_FORMAT')
     if os.getenv('COMPRESSION'):
         config['compression'] = os.getenv('COMPRESSION')
     if os.getenv('TABLE_LOCATION'):
@@ -398,8 +401,6 @@ def merge_config_with_args(args: argparse.Namespace, env_config: Dict[str, Any],
     if not hasattr(args, 'ctas') or args.ctas is None:
         if 'ctas' in env_config:
             args.ctas = env_config['ctas']
-    if not args.file_format and 'file_format' in env_config:
-        args.file_format = env_config['file_format']
     if not args.compression and 'compression' in env_config:
         args.compression = env_config['compression']
     if not args.table_location and 'table_location' in env_config:
@@ -479,7 +480,14 @@ def main() -> int:
             source_hdfs_path=args.source_hdfs_path,
             target_cluster=args.target_cluster,
             scp_target_host=args.scp_target_host,
-            scp_target_path=args.scp_target_path
+            scp_target_path=args.scp_target_path,
+            ctas=args.ctas,
+            compression=args.compression,
+            table_location=args.table_location,
+            partitioned_by=args.partitioned_by,
+            clustered_by=args.clustered_by,
+            buckets=args.buckets,
+            overwrite=args.overwrite
         )
         
         # Handle utility commands
@@ -536,7 +544,6 @@ def main() -> int:
             success = tool.create_table_as_select(
                 query=query,
                 target_table=args.target_table,
-                file_format=args.file_format,
                 compression=args.compression,
                 location=args.table_location,
                 partitioned_by=args.partitioned_by,

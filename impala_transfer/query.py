@@ -184,9 +184,9 @@ class QueryExecutor:
         Args:
             query: SELECT query to execute
             target_table: Name of the table to create
-            file_format: File format for the table (PARQUET, TEXTFILE, etc.)
+            file_format: (ignored, always PARQUET)
             compression: Compression format (SNAPPY, GZIP, etc.)
-            location: HDFS location for the table data
+            location: HDFS location for the table data (REQUIRED)
             partitioned_by: List of columns to partition by
             clustered_by: List of columns to cluster by
             buckets: Number of buckets for clustering
@@ -195,14 +195,17 @@ class QueryExecutor:
         Returns:
             bool: True if CTAS operation successful
         """
+        if not location:
+            logging.error("HDFS table location is required for CTAS operations.")
+            return False
         if self.connection_type == "sqlalchemy":
             return self._execute_ctas_sqlalchemy(
-                query, target_table, file_format, compression, location,
+                query, target_table, 'PARQUET', compression, location,
                 partitioned_by, clustered_by, buckets, overwrite
             )
         else:
             return self._execute_ctas_cursor(
-                query, target_table, file_format, compression, location,
+                query, target_table, 'PARQUET', compression, location,
                 partitioned_by, clustered_by, buckets, overwrite
             )
     
@@ -264,52 +267,27 @@ class QueryExecutor:
                          overwrite: bool) -> str:
         """
         Build CREATE TABLE AS SELECT query with Impala-specific options.
-        
-        Args:
-            query: SELECT query to execute
-            target_table: Name of the table to create
-            file_format: File format for the table
-            compression: Compression format
-            location: HDFS location for the table data
-            partitioned_by: List of columns to partition by
-            clustered_by: List of columns to cluster by
-            buckets: Number of buckets for clustering
-            overwrite: Whether to overwrite existing table
-            
-        Returns:
-            str: Complete CTAS query
+        Always uses STORED AS PARQUET and requires LOCATION.
         """
-        # Start building the CTAS query
         ctas_parts = []
-        
-        # Add CREATE TABLE statement
         if overwrite:
             ctas_parts.append(f"CREATE TABLE {target_table}")
         else:
             ctas_parts.append(f"CREATE TABLE IF NOT EXISTS {target_table}")
-        
-        # Add file format and compression
-        ctas_parts.append(f"STORED AS {file_format}")
+        ctas_parts.append("STORED AS PARQUET")
         if compression and compression.upper() != 'NONE':
             ctas_parts.append(f"COMPRESSION '{compression}'")
-        
-        # Add location if specified
         if location:
             ctas_parts.append(f"LOCATION '{location}'")
-        
-        # Add partitioning if specified
+        else:
+            raise ValueError("HDFS table location is required for CTAS operations.")
         if partitioned_by:
             partition_cols = ', '.join(partitioned_by)
             ctas_parts.append(f"PARTITIONED BY ({partition_cols})")
-        
-        # Add clustering if specified
         if clustered_by and buckets:
             cluster_cols = ', '.join(clustered_by)
             ctas_parts.append(f"CLUSTERED BY ({cluster_cols}) INTO {buckets} BUCKETS")
-        
-        # Add the SELECT query
         ctas_parts.append(f"AS {query}")
-        
         return ' '.join(ctas_parts)
     
     def drop_table(self, table_name: str, if_exists: bool = True) -> bool:
